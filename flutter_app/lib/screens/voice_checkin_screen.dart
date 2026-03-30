@@ -94,7 +94,7 @@ class _VoiceCheckinScreenState extends State<VoiceCheckinScreen> with TickerProv
     setState(() {
       _isListening = true;
       _transcript = '';
-      _triageResult = null;
+      // Don't clear _triageResult here — let the new one replace it smoothly
     });
     _speech.listen(
       onResult: (result) {
@@ -109,7 +109,6 @@ class _VoiceCheckinScreenState extends State<VoiceCheckinScreen> with TickerProv
     setState(() {
       _isListening = true;
       _transcript = '';
-      _triageResult = null;
     });
 
     // Simulate 3 seconds of "listening" then auto-fill demo transcript
@@ -326,9 +325,7 @@ class _VoiceCheckinScreenState extends State<VoiceCheckinScreen> with TickerProv
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _triageResult != null
-          ? _statusColor(_triageResult!.status).withOpacity(0.05)
-          : Colors.grey[50],
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text('Voice Check-In', style: TextStyle(fontSize: 22)),
         leading: IconButton(
@@ -482,46 +479,66 @@ class _VoiceCheckinScreenState extends State<VoiceCheckinScreen> with TickerProv
                     const SizedBox(height: 16),
                   ],
 
-                  // Triage result - bigger and clearer
+                  // Triage result - animated fade-in
                   if (_triageResult != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: _statusColor(_triageResult!.status).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: _statusColor(_triageResult!.status).withOpacity(0.3), width: 1.5),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            _statusIcon(_triageResult!.status),
-                            color: _statusColor(_triageResult!.status),
-                            size: 56,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _statusLabel(_triageResult!.status),
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
+                    AnimatedOpacity(
+                      opacity: 1.0,
+                      duration: const Duration(milliseconds: 500),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOut,
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: _statusColor(_triageResult!.status).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _statusColor(_triageResult!.status).withOpacity(0.3), width: 1.5),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              _statusIcon(_triageResult!.status),
                               color: _statusColor(_triageResult!.status),
-                              letterSpacing: 1,
+                              size: 56,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _triageResult!.reason,
-                            style: TextStyle(color: Colors.grey[700], fontSize: 16),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                            const SizedBox(height: 12),
+                            Text(
+                              _statusLabel(_triageResult!.status),
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                color: _statusColor(_triageResult!.status),
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _triageResult!.reason,
+                              style: TextStyle(color: Colors.grey[700], fontSize: 16),
+                              textAlign: TextAlign.center,
+                            ),
+                            if (_isSubmitting) ...[
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: _statusColor(_triageResult!.status),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Saving...',
+                                style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
-                    if (_isSubmitting)
-                      const LinearProgressIndicator()
-                    else
+                    if (!_isSubmitting)
                       SizedBox(
                         width: double.infinity,
                         height: 56,
