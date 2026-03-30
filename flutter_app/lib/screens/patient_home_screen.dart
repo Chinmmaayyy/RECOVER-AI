@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/supabase_service.dart';
+import '../services/med_reminder_service.dart';
 import 'voice_checkin_screen.dart';
 import 'ocr_scanner_screen.dart';
 
@@ -77,6 +78,11 @@ class _PatientHomeScreenState extends State<PatientHomeScreen> with SingleTicker
         _nextAppointment = appointment;
         _isLoading = false;
       });
+
+      // Schedule medicine reminder notifications
+      if (meds.isNotEmpty) {
+        MedReminderService.scheduleReminders(meds);
+      }
     } catch (e) {
       setState(() => _isLoading = false);
     }

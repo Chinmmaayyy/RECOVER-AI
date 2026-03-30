@@ -4,6 +4,7 @@ import 'screens/patient_home_screen.dart';
 import 'screens/caregiver_home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/offline_service.dart';
+import 'services/med_reminder_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,9 +17,12 @@ void main() async {
   // Initialize offline SQLite database
   try {
     await OfflineService.database;
-  } catch (_) {
-    // Non-fatal — offline cache will init on first use
-  }
+  } catch (_) {}
+
+  // Initialize medication reminder notifications
+  try {
+    await MedReminderService.init();
+  } catch (_) {}
 
   runApp(const RecoverAIApp());
 }
