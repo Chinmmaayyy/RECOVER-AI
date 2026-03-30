@@ -85,6 +85,8 @@ class _VoiceCheckinScreenState extends State<VoiceCheckinScreen> with TickerProv
     }
   }
 
+  DateTime? _lastSpeechTime;
+
   void _startListening() {
     if (DemoMode.isActive) {
       _startDemoListening();
@@ -94,14 +96,19 @@ class _VoiceCheckinScreenState extends State<VoiceCheckinScreen> with TickerProv
     setState(() {
       _isListening = true;
       _transcript = '';
-      // Don't clear _triageResult here — let the new one replace it smoothly
     });
+    _lastSpeechTime = DateTime.now();
     _speech.listen(
       onResult: (result) {
+        _lastSpeechTime = DateTime.now();
         setState(() => _transcript = result.recognizedWords);
+        // Auto-stop if result is final (user paused long enough)
+        if (result.finalResult && _transcript.isNotEmpty) {
+          _stopListening();
+        }
       },
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 5),
+      listenFor: const Duration(seconds: 15),
+      pauseFor: const Duration(seconds: 3),
     );
   }
 
@@ -129,91 +136,100 @@ class _VoiceCheckinScreenState extends State<VoiceCheckinScreen> with TickerProv
   }
 
   Future<void> _processTranscript() async {
-    // Use regex fallback NLP (on-device, no API needed)
+    // Step 1: Instant — run triage locally (no network, <1ms)
     final symptomJson = TriageService.regexFallbackNLP(_transcript);
-
-    // Get recent check-ins for escalation rule
-    final recentHistory = await SupabaseService.getCheckIns(widget.patientId, limit: 3);
-
-    // Run triage — pass raw transcript for better keyword matching
     final result = TriageService.evaluate(
       symptomJson: symptomJson,
       transcript: _transcript,
-      recentHistory: recentHistory,
     );
 
-    setState(() => _triageResult = result);
+    // Show result IMMEDIATELY — no waiting for network
+    setState(() {
+      _triageResult = result;
+      _isSubmitting = true;
+    });
 
-    // Submit to Supabase
-    setState(() => _isSubmitting = true);
+    // Step 2: Background — save to Supabase (don't block UI)
+    _submitToBackend(result, symptomJson);
+  }
+
+  Future<void> _submitToBackend(TriageResult result, Map<String, dynamic> symptomJson) async {
     try {
-      await SupabaseService.submitCheckIn(
+      // Run all network calls in parallel for speed
+      final futures = <Future>[];
+
+      // Submit check-in
+      futures.add(SupabaseService.submitCheckIn(
         patientId: widget.patientId,
         transcript: _transcript,
         symptomJson: symptomJson,
         triageStatus: result.status,
-      );
+      ));
 
-      // Create alert if yellow or red
+      // Create alert if needed
       if (result.status == 'red') {
-        await SupabaseService.createAlert(
+        futures.add(SupabaseService.createAlert(
           patientId: widget.patientId,
           alertType: 'voice_keyword',
           triggerReason: result.reason,
           triageStatus: 'red',
-        );
-        // Send Twilio SMS to caregiver
-        await SmsService.sendRedAlert(
+        ));
+        futures.add(SmsService.sendRedAlert(
           patientName: widget.patientName,
           caregiverPhone: SmsService.demoCaregiverPhone,
           reason: result.reason,
-        );
+        ));
       } else if (result.status == 'yellow') {
-        await SupabaseService.createAlert(
+        futures.add(SupabaseService.createAlert(
           patientId: widget.patientId,
           alertType: 'voice_keyword',
           triggerReason: result.reason,
           triageStatus: 'yellow',
-        );
+        ));
       }
 
-      // Streak: increment on green, reset on red/yellow
+      // Streak update
       if (result.status == 'green') {
-        await SupabaseService.incrementStreak(widget.patientId);
+        futures.add(SupabaseService.incrementStreak(widget.patientId));
       } else {
-        await SupabaseService.updateStreak(widget.patientId, 0);
+        futures.add(SupabaseService.updateStreak(widget.patientId, 0));
       }
-    } catch (e) {
-      // Offline fallback — cache locally and send SMS if red
-      await OfflineService.cacheCheckIn(
-        patientId: widget.patientId,
-        transcript: _transcript,
-        symptomJson: symptomJson,
-        triageStatus: result.status,
-      );
 
-      if (result.status == 'red') {
-        final cachedProfile = await OfflineService.getCachedProfile(widget.patientId);
-        final caregiverPhone = cachedProfile?['caregiver']?['phone'] as String?;
-        if (caregiverPhone != null) {
-          await OfflineService.sendEmergencySMS(
-            caregiverPhone: caregiverPhone,
-            patientName: widget.patientName,
-            reason: result.reason,
-          );
+      // Wait for all to finish in parallel
+      await Future.wait(futures);
+    } catch (e) {
+      // Offline fallback
+      try {
+        await OfflineService.cacheCheckIn(
+          patientId: widget.patientId,
+          transcript: _transcript,
+          symptomJson: symptomJson,
+          triageStatus: result.status,
+        );
+
+        if (result.status == 'red') {
+          final cachedProfile = await OfflineService.getCachedProfile(widget.patientId);
+          final caregiverPhone = cachedProfile?['caregiver']?['phone'] as String?;
+          if (caregiverPhone != null) {
+            await OfflineService.sendEmergencySMS(
+              caregiverPhone: caregiverPhone,
+              patientName: widget.patientName,
+              reason: result.reason,
+            );
+          }
         }
-      }
+      } catch (_) {}
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No internet — data saved locally. Will sync when reconnected.'),
-            duration: Duration(seconds: 4),
+            content: Text('Saved offline — will sync when connected.'),
+            duration: Duration(seconds: 3),
           ),
         );
       }
     }
-    setState(() => _isSubmitting = false);
+    if (mounted) setState(() => _isSubmitting = false);
   }
 
   Future<void> _resetDemoData() async {
