@@ -136,9 +136,10 @@ class _VoiceCheckinScreenState extends State<VoiceCheckinScreen> with TickerProv
     // Get recent check-ins for escalation rule
     final recentHistory = await SupabaseService.getCheckIns(widget.patientId, limit: 3);
 
-    // Run triage
+    // Run triage — pass raw transcript for better keyword matching
     final result = TriageService.evaluate(
       symptomJson: symptomJson,
+      transcript: _transcript,
       recentHistory: recentHistory,
     );
 

@@ -132,9 +132,10 @@ class OfflineService {
     // Get recent cached history
     final recentHistory = await getRecentCachedCheckIns(patientId);
 
-    // Run triage
+    // Run triage — pass raw transcript for better keyword matching
     final result = TriageService.evaluate(
       symptomJson: symptomJson,
+      transcript: transcript,
       recentHistory: recentHistory,
     );
 

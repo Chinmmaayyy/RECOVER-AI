@@ -43,3 +43,11 @@ Thumbs.db
 ## Secrets
 *.keystore
 *.jks
+
+## Local-only docs (not for GitHub)
+CLAUDE.MD
+PROJECT_SPEC.MD
+RecoverAI_Build_Guide-1.md
+RecoverAI_Complete_Build_Guide.md
+RecoverAI_Patch_Sessions.md
+SETUP.md

@@ -19,26 +19,36 @@ class TriageService {
   static const List<String> yellowKeywords = [
     'mild pain', 'nausea', 'tired', 'slight fever', 'sore',
     'headache', 'swelling', 'not sleeping', 'loss of appetite',
-    'constipation', 'mild discomfort'
+    'constipation', 'mild discomfort', 'uncomfortable',
+    'not feeling good', 'not feeling well', 'not well',
+    'feeling bad', 'feeling sick', 'feeling weak', 'feeling low',
+    'not good', 'unwell', 'a little pain', 'slight pain',
+    'don\'t feel good', 'don\'t feel well', 'body ache',
+    'no energy', 'fatigue', 'restless', 'can\'t sleep',
+    'stomach ache', 'vomiting', 'cough', 'cold',
+    'fever', 'weakness', 'pain', 'burning', 'itching',
   ];
 
   /// Core triage function
   static TriageResult evaluate({
     required Map<String, dynamic> symptomJson,
+    String transcript = '',
     List<Map<String, dynamic>> recentHistory = const [],
   }) {
     final symptom = (symptomJson['symptom'] ?? '').toString().toLowerCase();
     final systolicBp = symptomJson['systolic_bp'] as int?;
     final medicationsTaken = symptomJson['medications_taken'] as bool?;
+    // Check both extracted symptom AND full transcript for keyword matching
+    final textToCheck = '$symptom | ${transcript.toLowerCase()}';
 
     // Rule 1: BP override
     if (systolicBp != null && systolicBp > 150) {
       return TriageResult(status: 'red', reason: 'High BP detected: $systolicBp systolic');
     }
 
-    // Rule 2: Red keywords
+    // Rule 2: Red keywords — check full transcript too
     for (final kw in redKeywords) {
-      if (symptom.contains(kw)) {
+      if (textToCheck.contains(kw)) {
         return TriageResult(status: 'red', reason: 'Red keyword detected: "$kw"');
       }
     }
@@ -51,9 +61,9 @@ class TriageService {
       }
     }
 
-    // Rule 4: Yellow keywords
+    // Rule 4: Yellow keywords — check full transcript too
     for (final kw in yellowKeywords) {
-      if (symptom.contains(kw)) {
+      if (textToCheck.contains(kw)) {
         return TriageResult(status: 'yellow', reason: 'Yellow keyword detected: "$kw"');
       }
     }
